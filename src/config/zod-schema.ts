@@ -379,6 +379,7 @@ export const OpenClawSchema = z
             dangerouslyAllowPrivateNetwork: z.boolean().optional(),
             allowedHostnames: z.array(z.string()).optional(),
             hostnameAllowlist: z.array(z.string()).optional(),
+            ipAllowlist: z.array(z.string()).optional(),
           })
           .strict()
           .optional(),

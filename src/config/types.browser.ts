@@ -31,6 +31,8 @@ export type BrowserSsrFPolicyConfig = {
    * Supports exact hosts and "*.example.com" wildcard subdomains.
    */
   hostnameAllowlist?: string[];
+  /** IP addresses or CIDR ranges that should bypass SSRF protection (e.g., ["10.0.0.0/24", "192.168.1.5"]). */
+  ipAllowlist?: string[];
 };
 export type BrowserConfig = {
   enabled?: boolean;

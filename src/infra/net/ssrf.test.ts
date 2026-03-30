@@ -106,6 +106,99 @@ describe("ssrf ip classification", () => {
   });
 });
 
+describe("ipAllowlist policy", () => {
+  it("allows private IPs when in ipAllowlist", () => {
+    const policy = { ipAllowlist: ["10.0.0.1", "192.168.1.0/24", "172.16.0.0/16"] };
+
+    // Exact match
+    expect(isPrivateIpAddress("10.0.0.1", policy)).toBe(false);
+
+    // CIDR match /24
+    expect(isPrivateIpAddress("192.168.1.5", policy)).toBe(false);
+    expect(isPrivateIpAddress("192.168.1.255", policy)).toBe(false);
+
+    // CIDR match /16
+    expect(isPrivateIpAddress("172.16.0.1", policy)).toBe(false);
+    expect(isPrivateIpAddress("172.16.255.255", policy)).toBe(false);
+
+    // Outside CIDR range - should be blocked
+    expect(isPrivateIpAddress("192.168.2.1", policy)).toBe(true);
+    expect(isPrivateIpAddress("172.17.0.1", policy)).toBe(true);
+    expect(isPrivateIpAddress("10.0.0.2", policy)).toBe(true);
+  });
+
+  it("allows IPv6 addresses when in ipAllowlist", () => {
+    const policy = { ipAllowlist: ["fd00::1", "fe80::/64"] };
+
+    // Exact match
+    expect(isPrivateIpAddress("fd00::1", policy)).toBe(false);
+
+    // CIDR match
+    expect(isPrivateIpAddress("fe80::1", policy)).toBe(false);
+    expect(isPrivateIpAddress("fe80::ffff", policy)).toBe(false);
+
+    // Outside CIDR range - should be blocked
+    expect(isPrivateIpAddress("fd00::2", policy)).toBe(true);
+    expect(isPrivateIpAddress("fe81::1", policy)).toBe(true);
+  });
+
+  it("handles bracketed IPv6 addresses in ipAllowlist", () => {
+    const policy = { ipAllowlist: ["fd00::1"] };
+
+    expect(isPrivateIpAddress("[fd00::1]", policy)).toBe(false);
+  });
+
+  it("combines ipAllowlist with other policies", () => {
+    const policy = {
+      ipAllowlist: ["10.0.0.0/24"],
+      allowPrivateNetwork: false,
+    };
+
+    // IP in allowlist should be allowed even with allowPrivateNetwork=false
+    expect(isPrivateIpAddress("10.0.0.5", policy)).toBe(false);
+
+    // IP not in allowlist should still be blocked
+    expect(isPrivateIpAddress("10.0.1.5", policy)).toBe(true);
+  });
+
+  it("allows localhost in ipAllowlist", () => {
+    const policy = { ipAllowlist: ["127.0.0.1", "::1"] };
+
+    expect(isPrivateIpAddress("127.0.0.1", policy)).toBe(false);
+    expect(isPrivateIpAddress("::1", policy)).toBe(false);
+  });
+
+  it("works with isBlockedHostnameOrIp", () => {
+    const policy = { ipAllowlist: ["10.0.0.1", "192.168.1.0/24"] };
+
+    expect(isBlockedHostnameOrIp("10.0.0.1", policy)).toBe(false);
+    expect(isBlockedHostnameOrIp("192.168.1.100", policy)).toBe(false);
+    expect(isBlockedHostnameOrIp("10.0.0.2", policy)).toBe(true);
+  });
+
+  it("handles empty ipAllowlist", () => {
+    const policy = { ipAllowlist: [] };
+
+    expect(isPrivateIpAddress("10.0.0.1", policy)).toBe(true);
+  });
+
+  it("handles undefined ipAllowlist", () => {
+    const policy = {};
+
+    expect(isPrivateIpAddress("10.0.0.1", policy)).toBe(true);
+  });
+
+  it("ignores invalid CIDR entries", () => {
+    const policy = { ipAllowlist: ["10.0.0.0/24", "invalid-ip", "not.a.cidr"] };
+
+    // Valid entry works
+    expect(isPrivateIpAddress("10.0.0.1", policy)).toBe(false);
+
+    // Invalid entries don't cause errors, IP is still checked normally
+    expect(isPrivateIpAddress("192.168.1.1", policy)).toBe(true);
+  });
+});
+
 describe("isBlockedHostnameOrIp", () => {
   it.each([
     "localhost.localdomain",
