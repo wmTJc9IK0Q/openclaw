@@ -11,6 +11,7 @@ import {
   isLegacyIpv4Literal,
   parseCanonicalIpAddress,
   parseLooseIpAddress,
+  isIpInCidr,
 } from "../../shared/net/ip.js";
 import { normalizeHostname } from "./hostname.js";
 import { loadUndiciRuntimeDeps } from "./undici-runtime.js";
@@ -36,6 +37,7 @@ export type SsrFPolicy = {
   allowRfc2544BenchmarkRange?: boolean;
   allowedHostnames?: string[];
   hostnameAllowlist?: string[];
+  ipAllowlist?: string[];
 };
 
 const BLOCKED_HOSTNAMES = new Set([
@@ -112,6 +114,27 @@ function looksLikeUnsupportedIpv4Literal(address: string): boolean {
   return parts.every((part) => /^[0-9]+$/.test(part) || /^0x/i.test(part));
 }
 
+function isIpInAllowlist(address: string, allowlist?: string[]): boolean {
+  if (!allowlist || allowlist.length === 0) {
+    return false;
+  }
+  const normalized = address.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  // Remove brackets if present for IPv6
+  const cleanAddress = normalized.startsWith("[") && normalized.endsWith("]")
+    ? normalized.slice(1, -1)
+    : normalized;
+
+  for (const entry of allowlist) {
+    if (isIpInCidr(cleanAddress, entry)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Returns true for private/internal and special-use non-global addresses.
 export function isPrivateIpAddress(address: string, policy?: SsrFPolicy): boolean {
   let normalized = address.trim().toLowerCase();
@@ -121,6 +144,12 @@ export function isPrivateIpAddress(address: string, policy?: SsrFPolicy): boolea
   if (!normalized) {
     return false;
   }
+
+  // Check IP allowlist first - if the IP is explicitly allowed, return false (not blocked)
+  if (isIpInAllowlist(normalized, policy?.ipAllowlist)) {
+    return false;
+  }
+
   const blockOptions = resolveIpv4SpecialUseBlockOptions(policy);
 
   const strictIp = parseCanonicalIpAddress(normalized);
